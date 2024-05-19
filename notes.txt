@@ -1,0 +1,21 @@
+Let's compare TCP, UDP, and QUIC.
+
+unreliable: Transport packets are not assured of arrival and ordering.
+reliable: Transport packets are assured of arrival and ordering.
+
+Feature             	TCP	                UDP	                QUIC
+Connection-Oriented	    Yes	                No  	            Yes
+Transport Guarantees	Reliable	        Unreliable         	Reliable ('a)
+Packet Transfer	        Stream-based       	Message based   	Stream based
+Header Size	            ~20 bytes       	8 bytes	            ~16 bytes (depending on connection id)
+Control Flow, Congestion Avoidance/Control	Yes	No	Yes ('b)
+Based On	            IP	                IP              	UDP
+
+'a. Unreliable is supported as an extension.
+'b. QUIC control flow/congestion implementations will run in userspace whereas in TCP it's running in kernel space, however, there might be a kernel implementation for QUIC in the future.
+
+One of the biggest issues with TCP is that of Head-of-line blocking. It is a convenient feature because it ensures that all packages are sent and arrive in order. However, in cases of high throughput (multiplayer game networking) and big load in a short time (web page load), this can severely impact latency.
+
+QUIC is a general-purpose network protocol built on top of UDP, and standardized by the IETF. Although QUIC is still relatively new, the protocol is used for all connections from Chrome web browsers to the Google servers.
+
+QUIC solves a number of transport-layer and application-layer problems experienced by modern web applications. It is very similar to TCP+TLS+HTTP2, but implemented on top of UDP. Having QUIC as a self-contained protocol allows innovations which aren’t possible with existing protocols as they are hampered by legacy clients and middleboxes.
