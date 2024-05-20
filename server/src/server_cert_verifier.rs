@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-struct SkipServerVerification;
+pub struct SkipServerVerification;
 
 impl SkipServerVerification {
     pub fn new() -> Arc<Self> {
