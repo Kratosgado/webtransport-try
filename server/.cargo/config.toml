@@ -1,0 +1,7 @@
+[net]
+git-fetch-with-cli = true
+
+[env]
+RUST_LOG="debug"
+RUST_BACKTRACE="0"
+NATS_URL="0.0.0.0:4222"

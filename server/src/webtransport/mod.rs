@@ -2,6 +2,8 @@ pub mod webtransport_opt;
 pub mod get_key_and_cert_chain;
 pub mod is_http3;
 pub mod start;
+pub mod h3_connection;
+pub mod handle_session;
 
 pub const WEB_TRANSPORT_ALPN: &[&[u8]] = &[b"h3", b"h3-32", b"h3-31", b"h3-30", b"h3-29"];
 

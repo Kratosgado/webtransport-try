@@ -2,16 +2,18 @@ use std::{sync::Arc, time::Duration};
 
 use quinn::VarInt;
 use sec_http3::sec_http3_quinn;
-use tracing::{info, trace_span};
+use tracing::{error, info, trace_span};
 
-use crate::webtransport::{is_http3::is_http3, QUIC_ALPN, WEB_TRANSPORT_ALPN};
+use crate::webtransport::{
+    h3_connection::handle_h3_connection, is_http3::is_http3, QUIC_ALPN, WEB_TRANSPORT_ALPN,
+};
 
 use super::webtransport_opt::WebTransportOpt;
 
 pub async fn start(opt: WebTransportOpt) -> Result<(), Box<dyn std::error::Error>> {
     info!("WebTransportOpt: {opt:#?}");
-
-    let (key, certs) = crate::webtransport::get_key_and_cert_chain(opt.certs)?;
+    let (key, certs) =
+        crate::webtransport::get_key_and_cert_chain::get_key_and_cert_chain(opt.certs)?;
 
     let mut tls_config = rustls::ServerConfig::builder()
         .with_safe_default_cipher_suites()
@@ -36,21 +38,24 @@ pub async fn start(opt: WebTransportOpt) -> Result<(), Box<dyn std::error::Error
     transport_config.keep_alive_interval(Some(Duration::from_secs(2)));
     transport_config.max_idle_timeout(Some(VarInt::from_u32(10_000).into()));
     server_config.transport = Arc::new(transport_config);
-    let endpoint = quinn::Endpoint::server(config, opt.listen)?;
+    let endpoint = quinn::Endpoint::server(server_config, opt.listen)?;
 
     info!("Listening on: {}", opt.listen);
 
-    let nc = async_nats::connect(std::env::var("NATS_URL").expect("NATS_URL env var must be defined")).await.unwrap();
+    let nc =
+        async_nats::connect(std::env::var("NATS_URL").expect("NATS_URL env var must be defined"))
+            .await
+            .unwrap();
 
     // 2. accept new quic connections and spawn a new task to handle them
-    while let Some(new_conn ) = endpoint.accept().await {
+    while let Some(new_conn) = endpoint.accept().await {
         trace_span!("New connection being attempted");
         let nc = nc.clone();
 
         tokio::spawn(async move {
             match new_conn.await {
-                Ok(conn ) => {
-                    if is_http3(&conn){
+                Ok(conn) => {
+                    if is_http3(&conn) {
                         info!("new http3 established");
                         let h3_conn = sec_http3::server::builder()
                             .enable_webtransport(true)
@@ -62,35 +67,25 @@ pub async fn start(opt: WebTransportOpt) -> Result<(), Box<dyn std::error::Error
                             .await
                             .unwrap();
                         let nc = nc.clone();
-                        // if let Err(err ) = handle
-                    }
-                    else {
+                        if let Err(err) = handle_h3_connection(h3_conn, nc).await {
+                            error!("error handling h3 connection: {err:?}");
+                        }
+                    } else {
+                        // Todo: handle quic connections
                         info!("new quic established");
                         let nc = nc.clone();
-                        let (send, recv) = conn.open_bi().await.unwrap();
-                        let (mut send, mut recv) = (send.clone(), recv.clone());
-                        let nc = nc.clone();
-                        tokio::spawn(async move {
-                            let mut buf = vec![0; 1024];
-                            loop {
-                                let n = recv.read(&mut buf).await.unwrap();
-                                if n == 0 {
-                                    break;
-                                }
-                                let msg = std::str::from_utf8(&buf[..n]).unwrap();
-                                println!("Received: {}", msg);
-                                let _ = nc.publish("webtransport", msg).await;
-                            }
-                        });
-                        tokio::spawn(async move {
-                            loop {
-                                let msg = nc.subscribe("webtransport").await.unwrap();
-                                send.write_all(msg.as_bytes()).await.unwrap();
-                            }
-                        });
+                        todo!("handle quic connections")
                     }
                 }
+                Err(err) => {
+                    error!("error accepting connection: {err}");
+                }
             }
-        })
+        });
     }
+
+    // shut down gracefully
+    // wait for connections to be closed before exiting
+    endpoint.wait_idle().await;
+    Ok(())
 }
